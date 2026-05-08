@@ -9,6 +9,7 @@ import {
   Menu,
   Search,
   Settings,
+  ShieldCheck,
   Users,
   X,
 } from "lucide-react";
@@ -29,10 +30,15 @@ const secondaryNav = [
   { to: "/settings", label: "Configuración", icon: Settings },
 ];
 
+const adminNav = [
+  { to: "/admin/users", label: "Usuarios", icon: ShieldCheck },
+];
+
 export function DashboardLayout() {
   const { user } = useAuthStore();
   const { mutate: logout, isPending } = useLogout();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isAdmin = user?.role === "admin";
 
   const initials = useMemo(() => {
     if (!user?.name) return "PP";
@@ -111,6 +117,35 @@ export function DashboardLayout() {
                 </li>
               ))}
             </ul>
+
+            {isAdmin && (
+              <>
+                <p className="mt-7 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Administración
+                </p>
+                <ul className="space-y-1">
+                  {adminNav.map(({ to, label, icon: Icon }) => (
+                    <li key={to}>
+                      <NavLink
+                        to={to}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                            isActive
+                              ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30"
+                              : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                          )
+                        }
+                      >
+                        <Icon size={17} className="shrink-0" />
+                        <span>{label}</span>
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
             <p className="mt-7 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
               Sistema

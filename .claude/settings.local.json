@@ -4,7 +4,10 @@
       "Bash(dir C:xampphtdocsprestamos-frontend *)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8000/api)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8000)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(php artisan *)",
+      "Bash(./node_modules/.bin/tsc -b --pretty false)",
+      "Bash(node /c/xampp/htdocs/prestamos-frontend/node_modules/typescript/bin/tsc -b /c/xampp/htdocs/prestamos-frontend --pretty false)"
     ]
   }
 }

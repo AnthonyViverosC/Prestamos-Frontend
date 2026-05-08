@@ -80,12 +80,12 @@ export function LoginPage() {
             >
               Contraseña
             </label>
-            <button
-              type="button"
+            <Link
+              to="/forgot-password"
               className="text-xs font-semibold text-primary transition-colors hover:text-primary/80"
             >
               ¿La olvidaste?
-            </button>
+            </Link>
           </div>
           <div className="relative">
             <Lock
