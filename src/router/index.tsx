@@ -7,18 +7,25 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { GuestRoute } from "./GuestRoute";
 import { LoginPage } from "@/features/auth/components/LoginPage";
 import { RegisterPage } from "@/features/auth/components/RegisterPage";
+import { AuthLayout } from "@/shared/layouts/AuthLayout";
 import { DashboardLayout } from "@/shared/layouts/DashboardLayout";
 import { ClientsPage } from "@/features/clients/components/ClientsPage";
 import { LoansPage } from "@/features/loans/components/LoansPage";
 import { PaymentsPage } from "@/features/payments/components/PaymentsPage";
+import { DashboardPage } from "@/features/dashboard/components/DashboardPage";
 
 const router = createBrowserRouter([
   // Rutas públicas — solo accesibles sin sesión
   {
     element: <GuestRoute />,
     children: [
-      { path: "/login", element: <LoginPage /> },
-      { path: "/register", element: <RegisterPage /> },
+      {
+        element: <AuthLayout />,
+        children: [
+          { path: "/login", element: <LoginPage /> },
+          { path: "/register", element: <RegisterPage /> },
+        ],
+      },
     ],
   },
   // Rutas protegidas — requieren sesión activa
@@ -30,11 +37,7 @@ const router = createBrowserRouter([
         children: [
           {
             path: "/dashboard",
-            element: (
-              <div className="p-6">
-                <h1 className="text-2xl font-medium">Dashboard</h1>
-              </div>
-            ),
+            element: <DashboardPage />,
           },
           { path: "/clients", element: <ClientsPage /> },
           { path: "/loans", element: <LoansPage /> },

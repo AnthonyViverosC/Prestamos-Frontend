@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Loader2 } from "lucide-react";
+
 import { useCreateLoan } from "@/shared/hooks/useLoans";
 import { useClients } from "@/shared/hooks/useClients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,32 +19,40 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
-import {
-  calculateAmortization,
-  formatCurrency,
-} from "../utils/calculator";
-import { AmortizationTable } from "./AmortizationTable";
+import { calculateAmortization, formatCurrency } from "../utils/calculator";
 
 const loanSchema = z.object({
-  client_id: z.coerce.number().int().positive("Selecciona un cliente"),
-  principal_amount: z.coerce.number().positive("Debe ser mayor a 0"),
-  interest_rate: z.coerce
+  client_id: z.number().int().positive("Selecciona un cliente"),
+  principal_amount: z.number().positive("Debe ser mayor a 0"),
+  interest_rate: z
     .number()
     .min(0, "No puede ser negativo")
     .max(100, "Máximo 100%"),
   period_type: z.enum(["daily", "weekly", "monthly"]),
-  period_count: z.coerce.number().int().min(1, "Mínimo 1 cuota"),
+  period_count: z.number().int().min(1, "Mínimo 1 cuota"),
   start_date: z.string().min(1, "Selecciona una fecha"),
-  late_fee_rate: z.coerce.number().min(0).optional(),
+  late_fee_rate: z.preprocess(
+    (value) => {
+      if (value === "" || value === null || value === undefined) {
+        return undefined;
+      }
+      if (typeof value === "number" && Number.isNaN(value)) {
+        return undefined;
+      }
+      return Number(value);
+    },
+    z.number().min(0).optional(),
+  ),
   notes: z.string().optional(),
 });
 
-type LoanFormData = z.infer<typeof loanSchema>;
+type LoanFormInput = z.input<typeof loanSchema>;
+type LoanFormData = z.output<typeof loanSchema>;
 
 interface Props {
   open: boolean;
@@ -51,9 +61,16 @@ interface Props {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const PERIOD_LABELS: Record<string, string> = {
+  daily: "Diaria",
+  weekly: "Semanal",
+  monthly: "Mensual",
+};
+
 export function LoanForm({ open, onClose }: Props) {
   const { mutate: create, isPending } = useCreateLoan();
   const [clientSearch, setClientSearch] = useState("");
+
   const { data: clientsData } = useClients({
     search: clientSearch || undefined,
     status: "active",
@@ -67,7 +84,7 @@ export function LoanForm({ open, onClose }: Props) {
     watch,
     reset,
     formState: { errors },
-  } = useForm<LoanFormData>({
+  } = useForm<LoanFormInput, unknown, LoanFormData>({
     resolver: zodResolver(loanSchema),
     defaultValues: {
       client_id: 0,
@@ -99,6 +116,9 @@ export function LoanForm({ open, onClose }: Props) {
     [principal, rate, count, type, startDate],
   );
 
+  const hasValidPreview =
+    Number(principal) > 0 && Number(count) > 0 && startDate.length > 0;
+
   const onSubmit = (data: LoanFormData) => {
     create(data, {
       onSuccess: () => {
@@ -117,182 +137,224 @@ export function LoanForm({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Nuevo préstamo</DialogTitle>
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto p-0 sm:rounded-2xl">
+        <DialogHeader className="border-b border-slate-200 px-6 py-5">
+          <DialogTitle className="text-xl font-semibold tracking-tight">
+            Nuevo préstamo
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-500">
+            Configura las condiciones del préstamo. La proyección se calcula al
+            final.
+          </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="client_id">Cliente *</Label>
-              <Controller
-                control={control}
-                name="client_id"
-                render={({ field }) => (
-                  <Select
-                    value={field.value ? String(field.value) : ""}
-                    onValueChange={(v) => field.onChange(Number(v))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="p-2">
-                        <Input
-                          placeholder="Buscar cliente..."
-                          value={clientSearch}
-                          onChange={(e) => setClientSearch(e.target.value)}
-                          onKeyDown={(e) => e.stopPropagation()}
-                        />
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="flex flex-col gap-5 px-6 py-6"
+        >
+          <Field
+            label="Cliente"
+            error={errors.client_id?.message}
+            required
+          >
+            <Controller
+              control={control}
+              name="client_id"
+              render={({ field }) => (
+                <Select
+                  value={field.value ? String(field.value) : ""}
+                  onValueChange={(value) => field.onChange(Number(value))}
+                >
+                  <SelectTrigger aria-invalid={!!errors.client_id}>
+                    <SelectValue placeholder="Selecciona un cliente activo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <div className="border-b border-slate-100 p-2">
+                      <Input
+                        placeholder="Buscar por nombre o documento…"
+                        value={clientSearch}
+                        onChange={(event) =>
+                          setClientSearch(event.target.value)
+                        }
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className="h-9"
+                      />
+                    </div>
+                    {clientsData?.data.length === 0 && (
+                      <div className="px-3 py-3 text-sm text-slate-500">
+                        Sin resultados
                       </div>
-                      {clientsData?.data.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.full_name}
-                          {c.dni ? ` · ${c.dni}` : ""}
-                        </SelectItem>
-                      ))}
-                      {clientsData?.data.length === 0 && (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                          Sin resultados
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {errors.client_id && (
-                <p className="text-xs text-destructive">
-                  {errors.client_id.message}
-                </p>
+                    )}
+                    {clientsData?.data.map((client) => (
+                      <SelectItem key={client.id} value={String(client.id)}>
+                        <span className="font-medium">{client.full_name}</span>
+                        {client.dni && (
+                          <span className="ml-2 text-xs text-slate-500">
+                            · {client.dni}
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
-            </div>
+            />
+          </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="start_date">Fecha de inicio *</Label>
-              <Input
-                id="start_date"
-                type="date"
-                {...register("start_date")}
-              />
-              {errors.start_date && (
-                <p className="text-xs text-destructive">
-                  {errors.start_date.message}
-                </p>
-              )}
-            </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field
+              id="principal_amount"
+              label="Monto"
+              error={errors.principal_amount?.message}
+              required
+            >
+              <div className="relative">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+                  $
+                </span>
+                <Input
+                  id="principal_amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0"
+                  aria-invalid={!!errors.principal_amount}
+                  className="pl-8"
+                  {...register("principal_amount", { valueAsNumber: true })}
+                />
+              </div>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="principal_amount">Monto del préstamo *</Label>
+            <Field
+              id="interest_rate"
+              label="Tasa (%)"
+              error={errors.interest_rate?.message}
+              required
+            >
+              <div className="relative">
+                <Input
+                  id="interest_rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0"
+                  aria-invalid={!!errors.interest_rate}
+                  className="pr-9"
+                  {...register("interest_rate", { valueAsNumber: true })}
+                />
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+                  %
+                </span>
+              </div>
+            </Field>
+
+            <Field
+              id="period_count"
+              label="Cuotas"
+              error={errors.period_count?.message}
+              required
+            >
               <Input
-                id="principal_amount"
+                id="period_count"
                 type="number"
-                step="0.01"
-                min="0"
-                placeholder="1000000"
-                {...register("principal_amount")}
+                min="1"
+                placeholder="12"
+                aria-invalid={!!errors.period_count}
+                {...register("period_count", { valueAsNumber: true })}
               />
-              {errors.principal_amount && (
-                <p className="text-xs text-destructive">
-                  {errors.principal_amount.message}
-                </p>
-              )}
-            </div>
+            </Field>
+          </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="interest_rate">Tasa de interés (% por período) *</Label>
-              <Input
-                id="interest_rate"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="2.5"
-                {...register("interest_rate")}
-              />
-              {errors.interest_rate && (
-                <p className="text-xs text-destructive">
-                  {errors.interest_rate.message}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Tipo de período *</Label>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Frecuencia" required>
               <Controller
                 control={control}
                 name="period_type"
                 render={({ field }) => (
-                  <Select
-                    value={field.value}
-                    onValueChange={field.onChange}
-                  >
+                  <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">Diario</SelectItem>
+                      <SelectItem value="daily">Diaria</SelectItem>
                       <SelectItem value="weekly">Semanal</SelectItem>
                       <SelectItem value="monthly">Mensual</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
               />
-            </div>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="period_count">Número de cuotas *</Label>
+            <Field
+              id="start_date"
+              label="Fecha de inicio"
+              error={errors.start_date?.message}
+              required
+            >
               <Input
-                id="period_count"
-                type="number"
-                min="1"
-                placeholder="12"
-                {...register("period_count")}
+                id="start_date"
+                type="date"
+                aria-invalid={!!errors.start_date}
+                {...register("start_date")}
               />
-              {errors.period_count && (
-                <p className="text-xs text-destructive">
-                  {errors.period_count.message}
-                </p>
-              )}
-            </div>
+            </Field>
+          </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="late_fee_rate">Mora (% mensual)</Label>
+          <Field id="late_fee_rate" label="Mora mensual">
+            <div className="relative">
               <Input
                 id="late_fee_rate"
                 type="number"
                 step="0.01"
                 min="0"
                 placeholder="0"
-                {...register("late_fee_rate")}
+                className="pr-9"
+                {...register("late_fee_rate", { valueAsNumber: true })}
               />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+                %
+              </span>
             </div>
+          </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="notes">Notas</Label>
-              <Input
-                id="notes"
-                placeholder="Información adicional..."
-                {...register("notes")}
-              />
-            </div>
-          </div>
-
-          {/* Resumen y tabla en tiempo real */}
-          <div className="grid grid-cols-3 gap-3 bg-muted/40 rounded-md p-3">
-            <Stat label="Cuota" value={formatCurrency(calculation.installment)} />
-            <Stat label="Total a pagar" value={formatCurrency(calculation.total)} />
-            <Stat
-              label="Interés total"
-              value={formatCurrency(calculation.totalInterest)}
+          <Field id="notes" label="Notas internas">
+            <Textarea
+              id="notes"
+              placeholder="Acuerdos especiales, contexto del préstamo…"
+              rows={3}
+              {...register("notes")}
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <Label>Tabla de amortización</Label>
-            <AmortizationTable rows={calculation.rows} maxHeight="280px" />
-          </div>
+          {/* Resumen de proyección */}
+          {hasValidPreview && (
+            <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/80">
+                Proyección
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <SummaryItem
+                  label="Cuota"
+                  value={formatCurrency(calculation.installment)}
+                  emphasis
+                />
+                <SummaryItem
+                  label="Total"
+                  value={formatCurrency(calculation.total)}
+                />
+                <SummaryItem
+                  label="Interés"
+                  value={formatCurrency(calculation.totalInterest)}
+                />
+                <SummaryItem
+                  label="Frecuencia"
+                  value={`${PERIOD_LABELS[type] ?? "—"} · ${Number(count)}`}
+                />
+              </div>
+            </div>
+          )}
 
-          <DialogFooter>
+          <DialogFooter className="-mx-6 -mb-6 border-t border-slate-200 bg-slate-50/60 px-6 py-4">
             <Button
               type="button"
               variant="outline"
@@ -302,7 +364,7 @@ export function LoanForm({ open, onClose }: Props) {
               Cancelar
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 size={16} className="mr-2 animate-spin" />}
+              {isPending && <Loader2 size={16} className="animate-spin" />}
               Crear préstamo
             </Button>
           </DialogFooter>
@@ -312,11 +374,62 @@ export function LoanForm({ open, onClose }: Props) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Field({
+  id,
+  label,
+  hint,
+  error,
+  required,
+  children,
+}: {
+  id?: string;
+  label: string;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label htmlFor={id} className="text-sm font-medium text-slate-800">
+          {label}
+          {required && <span className="ml-0.5 text-destructive">*</span>}
+        </label>
+        {hint && !error && (
+          <span className="text-xs text-slate-400">{hint}</span>
+        )}
+      </div>
+      {children}
+      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function SummaryItem({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p
+        className={
+          emphasis
+            ? "mt-1 truncate text-base font-semibold tracking-tight text-slate-950"
+            : "mt-1 truncate text-sm font-semibold text-slate-900"
+        }
+        title={value}
+      >
+        {value}
+      </p>
     </div>
   );
 }
