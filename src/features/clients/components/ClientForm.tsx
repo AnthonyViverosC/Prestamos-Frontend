@@ -30,11 +30,11 @@ const clientSchema = z.object({
   full_name: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   dni: z.string().max(20).optional().or(z.literal("")),
   phone: z.string().max(20).optional().or(z.literal("")),
-  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  email: z.email("Email inválido").optional().or(z.literal("")),
   address: z.string().optional().or(z.literal("")),
   city: z.string().max(100).optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
-  status: z.enum(["active", "inactive", "defaulter"]).default("active"),
+  status: z.enum(["active", "inactive", "defaulter"]),
 });
 
 type ClientFormData = z.infer<typeof clientSchema>;
