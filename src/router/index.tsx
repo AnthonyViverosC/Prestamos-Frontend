@@ -10,8 +10,10 @@ import { RegisterPage } from "@/features/auth/components/RegisterPage";
 import { DashboardLayout } from "@/shared/layouts/DashboardLayout";
 import { ClientsPage } from "@/features/clients/components/ClientsPage";
 import { LoansPage } from "@/features/loans/components/LoansPage";
+import { PaymentsPage } from "@/features/payments/components/PaymentsPage";
 
 const router = createBrowserRouter([
+  // Rutas públicas — solo accesibles sin sesión
   {
     element: <GuestRoute />,
     children: [
@@ -19,6 +21,7 @@ const router = createBrowserRouter([
       { path: "/register", element: <RegisterPage /> },
     ],
   },
+  // Rutas protegidas — requieren sesión activa
   {
     element: <ProtectedRoute />,
     children: [
@@ -35,18 +38,12 @@ const router = createBrowserRouter([
           },
           { path: "/clients", element: <ClientsPage /> },
           { path: "/loans", element: <LoansPage /> },
-          {
-            path: "/payments",
-            element: (
-              <div className="p-6">
-                <h1 className="text-2xl font-medium">Pagos</h1>
-              </div>
-            ),
-          },
+          { path: "/payments", element: <PaymentsPage /> },
         ],
       },
     ],
   },
+  // Redirecciones
   { path: "/", element: <Navigate to="/dashboard" /> },
   { path: "*", element: <Navigate to="/dashboard" /> },
 ]);
