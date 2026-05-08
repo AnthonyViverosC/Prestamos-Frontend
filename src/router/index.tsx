@@ -8,6 +8,7 @@ import { GuestRoute } from "./GuestRoute";
 import { LoginPage } from "@/features/auth/components/LoginPage";
 import { RegisterPage } from "@/features/auth/components/RegisterPage";
 import { DashboardLayout } from "@/shared/layouts/DashboardLayout";
+import { ClientsPage } from "@/features/clients/components/ClientsPage";
 
 const router = createBrowserRouter([
   {
@@ -31,14 +32,7 @@ const router = createBrowserRouter([
               </div>
             ),
           },
-          {
-            path: "/clients",
-            element: (
-              <div className="p-6">
-                <h1 className="text-2xl font-medium">Clientes</h1>
-              </div>
-            ),
-          },
+          { path: "/clients", element: <ClientsPage /> },
           {
             path: "/loans",
             element: (
