@@ -16,30 +16,24 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import api from "@/shared/lib/axios";
 
 const paymentSchema = z.object({
-  loan_id: z.number().min(1, "Selecciona un préstamo"),
-
-  installment_id: z.number().nullable(),
-
+  loan_id: z.coerce.number().int().positive("Selecciona un prestamo"),
+  installment_id: z.number().int().positive().nullable(),
   amount: z.coerce.number().min(0.01, "El monto debe ser mayor a 0"),
-
   payment_date: z.string().min(1, "La fecha es requerida"),
-
   method: z.enum(["cash", "transfer", "other"]),
-
   reference: z.string().optional().or(z.literal("")),
-
   notes: z.string().optional().or(z.literal("")),
 });
 
-type PaymentFormData = z.infer<typeof paymentSchema>;
+type PaymentFormData = z.output<typeof paymentSchema>;
 
 interface Loan {
   id: number;
@@ -65,14 +59,16 @@ interface Props {
   defaultLoanId?: number;
 }
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
   const { mutate: createPayment, isPending } = useCreatePayment();
-
   const [loans, setLoans] = useState<Loan[]>([]);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [loadingLoans, setLoadingLoans] = useState(false);
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -81,12 +77,11 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
     formState: { errors },
   } = useForm<z.input<typeof paymentSchema>, unknown, PaymentFormData>({
     resolver: zodResolver(paymentSchema),
-
     defaultValues: {
       loan_id: defaultLoanId ?? 0,
       installment_id: null,
       amount: 0,
-      payment_date: new Date().toISOString().split("T")[0],
+      payment_date: today(),
       method: "cash",
       reference: "",
       notes: "",
@@ -94,12 +89,13 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
   });
 
   const selectedLoanId = watch("loan_id");
+  const selectedInstallmentId = watch("installment_id");
+  const selectedLoan = loans.find((loan) => loan.id === selectedLoanId);
 
-  const selectedLoan = loans.find((l) => l.id === selectedLoanId);
-
-  // Cargar préstamos
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     setLoadingLoans(true);
 
@@ -110,55 +106,85 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
           per_page: 100,
         },
       })
-      .then((r) => {
-        setLoans(r.data.data ?? []);
+      .then((response) => {
+        setLoans(response.data.data ?? []);
       })
       .finally(() => {
         setLoadingLoans(false);
       });
   }, [open]);
 
-  // Cargar cuotas
   useEffect(() => {
-    if (!selectedLoanId) return;
+    if (!selectedLoanId) {
+      setInstallments([]);
+      return;
+    }
 
-    api.get(`/loans/${selectedLoanId}`).then((r) => {
-      const pending = (r.data.installments ?? []).filter(
-        (i: Installment) => i.status !== "paid",
+    api.get(`/loans/${selectedLoanId}`).then((response) => {
+      const pending = (response.data.installments ?? []).filter(
+        (installment: Installment) => installment.status !== "paid",
       );
 
       setInstallments(pending);
     });
   }, [selectedLoanId]);
 
-  // Autollenar monto
-  const selectedInstallmentId = watch("installment_id");
-
   useEffect(() => {
-    if (!selectedInstallmentId) return;
+    if (!selectedInstallmentId) {
+      return;
+    }
 
-    const inst = installments.find((i) => i.id === selectedInstallmentId);
+    const installment = installments.find(
+      (entry) => entry.id === selectedInstallmentId,
+    );
 
-    if (inst) {
-      setValue("amount", parseFloat(inst.balance));
+    if (installment) {
+      setValue("amount", parseFloat(installment.balance));
     }
   }, [selectedInstallmentId, installments, setValue]);
 
   useEffect(() => {
     if (!open) {
-      reset();
+      reset({
+        loan_id: defaultLoanId ?? 0,
+        installment_id: null,
+        amount: 0,
+        payment_date: today(),
+        method: "cash",
+        reference: "",
+        notes: "",
+      });
       setInstallments([]);
+      return;
     }
 
     if (defaultLoanId) {
       setValue("loan_id", defaultLoanId);
     }
-  }, [open, defaultLoanId, reset, setValue]);
+  }, [defaultLoanId, open, reset, setValue]);
 
   const onSubmit = (data: PaymentFormData) => {
-    createPayment(data, {
-      onSuccess: onClose,
-    });
+    createPayment(
+      {
+        ...data,
+        reference: data.reference ?? "",
+        notes: data.notes ?? "",
+      },
+      {
+      onSuccess: () => {
+        reset({
+          loan_id: defaultLoanId ?? 0,
+          installment_id: null,
+          amount: 0,
+          payment_date: today(),
+          method: "cash",
+          reference: "",
+          notes: "",
+        });
+        onClose();
+      },
+      },
+    );
   };
 
   return (
@@ -170,37 +196,41 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="flex flex-col gap-4 py-2">
-            {/* Prestamo */}
             <div className="flex flex-col gap-1.5">
-              <Label>Préstamo *</Label>
+              <Label>Prestamo *</Label>
 
               {loadingLoans ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 size={14} className="animate-spin" />
-                  Cargando préstamos...
+                  Cargando prestamos...
                 </div>
               ) : (
-                <Select
-                  value={selectedLoanId ? String(selectedLoanId) : ""}
-                  onValueChange={(v) => {
-                    setValue("loan_id", Number(v));
+                <Controller
+                  control={control}
+                  name="loan_id"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? String(field.value) : ""}
+                      onValueChange={(value) => {
+                        field.onChange(Number(value));
+                        setValue("installment_id", null);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un prestamo" />
+                      </SelectTrigger>
 
-                    setValue("installment_id", null);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un préstamo" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {loans.map((loan) => (
-                      <SelectItem key={loan.id} value={String(loan.id)}>
-                        {loan.client.full_name} — Saldo: $
-                        {parseFloat(loan.balance).toFixed(2)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      <SelectContent>
+                        {loans.map((loan) => (
+                          <SelectItem key={loan.id} value={String(loan.id)}>
+                            {loan.client.full_name} - Saldo: $
+                            {parseFloat(loan.balance).toFixed(2)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               )}
 
               {errors.loan_id && (
@@ -210,44 +240,48 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
               )}
             </div>
 
-            {/* Cuotas */}
             {installments.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <Label>Cuota a pagar</Label>
 
-                <Select
-                  value={
-                    selectedInstallmentId
-                      ? String(selectedInstallmentId)
-                      : "none"
-                  }
-                  onValueChange={(v) =>
-                    setValue("installment_id", v === "none" ? null : Number(v))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona una cuota (opcional)" />
-                  </SelectTrigger>
+                <Controller
+                  control={control}
+                  name="installment_id"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? String(field.value) : "none"}
+                      onValueChange={(value) =>
+                        field.onChange(value === "none" ? null : Number(value))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una cuota (opcional)" />
+                      </SelectTrigger>
 
-                  <SelectContent>
-                    <SelectItem value="none">Abono libre</SelectItem>
+                      <SelectContent>
+                        <SelectItem value="none">Abono libre</SelectItem>
 
-                    {installments.map((inst) => (
-                      <SelectItem key={inst.id} value={String(inst.id)}>
-                        Cuota #{inst.installment_number} — Vence:{" "}
-                        {inst.due_date} — ${parseFloat(inst.balance).toFixed(2)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                        {installments.map((installment) => (
+                          <SelectItem
+                            key={installment.id}
+                            value={String(installment.id)}
+                          >
+                            Cuota #{installment.installment_number} - Vence:{" "}
+                            {installment.due_date} - $
+                            {parseFloat(installment.balance).toFixed(2)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </div>
             )}
 
-            {/* Saldo */}
             {selectedLoan && (
-              <div className="bg-muted rounded-md px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center justify-between rounded-md bg-muted px-4 py-3">
                 <span className="text-sm text-muted-foreground">
-                  Saldo pendiente del préstamo
+                  Saldo pendiente del prestamo
                 </span>
 
                 <span className="text-sm font-medium">
@@ -256,7 +290,6 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
               </div>
             )}
 
-            {/* Monto y fecha */}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="amount">Monto *</Label>
@@ -294,29 +327,27 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
               </div>
             </div>
 
-            {/* Metodo */}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label>Método de pago</Label>
+                <Label>Metodo de pago</Label>
 
-                <Select
-                  value={watch("method")}
-                  onValueChange={(v) =>
-                    setValue("method", v as "cash" | "transfer" | "other")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Controller
+                  control={control}
+                  name="method"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
 
-                  <SelectContent>
-                    <SelectItem value="cash">Efectivo</SelectItem>
-
-                    <SelectItem value="transfer">Transferencia</SelectItem>
-
-                    <SelectItem value="other">Otro</SelectItem>
-                  </SelectContent>
-                </Select>
+                      <SelectContent>
+                        <SelectItem value="cash">Efectivo</SelectItem>
+                        <SelectItem value="transfer">Transferencia</SelectItem>
+                        <SelectItem value="other">Otro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -330,7 +361,6 @@ export function PaymentForm({ open, onClose, defaultLoanId }: Props) {
               </div>
             </div>
 
-            {/* Notas */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="notes">Notas</Label>
 
