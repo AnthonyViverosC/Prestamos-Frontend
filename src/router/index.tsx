@@ -9,6 +9,7 @@ import { LoginPage } from "@/features/auth/components/LoginPage";
 import { RegisterPage } from "@/features/auth/components/RegisterPage";
 import { DashboardLayout } from "@/shared/layouts/DashboardLayout";
 import { ClientsPage } from "@/features/clients/components/ClientsPage";
+import { LoansPage } from "@/features/loans/components/LoansPage";
 
 const router = createBrowserRouter([
   {
@@ -33,14 +34,7 @@ const router = createBrowserRouter([
             ),
           },
           { path: "/clients", element: <ClientsPage /> },
-          {
-            path: "/loans",
-            element: (
-              <div className="p-6">
-                <h1 className="text-2xl font-medium">Préstamos</h1>
-              </div>
-            ),
-          },
+          { path: "/loans", element: <LoansPage /> },
           {
             path: "/payments",
             element: (
